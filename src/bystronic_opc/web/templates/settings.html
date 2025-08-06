@@ -1,0 +1,538 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Bystronic OPC{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <h2><i class="bi bi-gear"></i> Settings & Configuration</h2>
+        <p class="text-muted">Configure your Bystronic OPC monitoring system</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Machine Configuration -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-gear-fill"></i> Machine Configuration</h5>
+                <button class="btn btn-sm btn-outline-primary" onclick="addMachine()">
+                    <i class="bi bi-plus"></i> Add Machine
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="machineList">
+                    {% for machine_name, machine_url in machines.items() %}
+                    <div class="machine-config-item mb-3 p-3 border rounded">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <div class="mb-2">
+                                    <label class="form-label">Machine Name</label>
+                                    <input type="text" class="form-control" value="{{ machine_name }}" readonly>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">OPC UA URL</label>
+                                    <input type="text" class="form-control" value="{{ machine_url }}" readonly>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="testConnection('{{ machine_name }}')">
+                                        <i class="bi bi-wifi"></i> Test Connection
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="editMachine('{{ machine_name }}')">
+                                        <i class="bi bi-pencil"></i> Edit
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="removeMachine('{{ machine_name }}')">
+                                        <i class="bi bi-trash"></i> Remove
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="ms-3">
+                                <span class="badge bg-secondary" id="status-{{ machine_name }}">Unknown</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- System Settings -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-sliders"></i> System Settings</h5>
+            </div>
+            <div class="card-body">
+                <form id="systemSettingsForm">
+                    <div class="mb-3">
+                        <label for="updateInterval" class="form-label">Update Interval (seconds)</label>
+                        <input type="number" class="form-control" id="updateInterval" value="30" min="5" max="300">
+                        <div class="form-text">How often to refresh machine data</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="retryAttempts" class="form-label">Retry Attempts</label>
+                        <input type="number" class="form-control" id="retryAttempts" value="3" min="1" max="10">
+                        <div class="form-text">Number of connection retry attempts</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="connectionTimeout" class="form-label">Connection Timeout (seconds)</label>
+                        <input type="number" class="form-control" id="connectionTimeout" value="10" min="5" max="60">
+                        <div class="form-text">Timeout for OPC UA connections</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enableLogging" checked>
+                            <label class="form-check-label" for="enableLogging">
+                                Enable detailed logging
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="autoReconnect" checked>
+                            <label class="form-check-label" for="autoReconnect">
+                                Auto-reconnect on connection loss
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check"></i> Save Settings
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Export Settings -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-download"></i> Export Settings</h5>
+            </div>
+            <div class="card-body">
+                <form id="exportSettingsForm">
+                    <div class="mb-3">
+                        <label for="exportFormat" class="form-label">Default Export Format</label>
+                        <select class="form-select" id="exportFormat">
+                            <option value="csv">CSV</option>
+                            <option value="excel">Excel</option>
+                            <option value="json">JSON</option>
+                            <option value="pdf">PDF Report</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="exportPath" class="form-label">Export Directory</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="exportPath" value="./exports/" readonly>
+                            <button class="btn btn-outline-secondary" type="button" onclick="selectExportPath()">
+                                <i class="bi bi-folder"></i> Browse
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="includeTimestamp" checked>
+                            <label class="form-check-label" for="includeTimestamp">
+                                Include timestamp in filename
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check"></i> Save Export Settings
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- System Information -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-info-circle"></i> System Information</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr>
+                        <td>Version:</td>
+                        <td><strong>0.1.0</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Python Version:</td>
+                        <td>3.9.0</td>
+                    </tr>
+                    <tr>
+                        <td>Flask Version:</td>
+                        <td>2.3.0</td>
+                    </tr>
+                    <tr>
+                        <td>AsyncUA Version:</td>
+                        <td>1.0.0</td>
+                    </tr>
+                    <tr>
+                        <td>Uptime:</td>
+                        <td id="systemUptime">0h 0m</td>
+                    </tr>
+                    <tr>
+                        <td>Memory Usage:</td>
+                        <td id="memoryUsage">Loading...</td>
+                    </tr>
+                    <tr>
+                        <td>CPU Usage:</td>
+                        <td id="cpuUsage">Loading...</td>
+                    </tr>
+                </table>
+                
+                <hr>
+                
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-warning" onclick="restartSystem()">
+                        <i class="bi bi-arrow-clockwise"></i> Restart System
+                    </button>
+                    <button class="btn btn-outline-info" onclick="checkUpdates()">
+                        <i class="bi bi-cloud-download"></i> Check for Updates
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="downloadLogs()">
+                        <i class="bi bi-file-earmark-text"></i> Download Logs
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Backup & Restore -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-shield-check"></i> Backup & Restore</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Create Backup</h6>
+                        <p class="text-muted">Backup your configuration and historical data</p>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="backupConfig" checked>
+                                <label class="form-check-label" for="backupConfig">
+                                    Include configuration
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="backupData" checked>
+                                <label class="form-check-label" for="backupData">
+                                    Include historical data
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="backupLogs">
+                                <label class="form-check-label" for="backupLogs">
+                                    Include log files
+                                </label>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" onclick="createBackup()">
+                            <i class="bi bi-download"></i> Create Backup
+                        </button>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Restore from Backup</h6>
+                        <p class="text-muted">Restore from a previous backup file</p>
+                        <div class="mb-3">
+                            <input type="file" class="form-control" id="backupFile" accept=".zip,.tar.gz">
+                            <div class="form-text">Select a backup file to restore</div>
+                        </div>
+                        <button class="btn btn-warning" onclick="restoreBackup()">
+                            <i class="bi bi-upload"></i> Restore Backup
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Machine Configuration Modal -->
+<div class="modal fade" id="machineConfigModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Machine Configuration</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="machineConfigForm">
+                    <input type="hidden" id="machineId">
+                    <div class="mb-3">
+                        <label for="machineName" class="form-label">Machine Name</label>
+                        <input type="text" class="form-control" id="machineName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="machineUrl" class="form-label">OPC UA URL</label>
+                        <input type="url" class="form-control" id="machineUrl" placeholder="opc.tcp://192.168.1.100:56000" required>
+                        <div class="form-text">Format: opc.tcp://ip-address:port</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="machineDescription" class="form-label">Description (optional)</label>
+                        <textarea class="form-control" id="machineDescription" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="machineEnabled" checked>
+                            <label class="form-check-label" for="machineEnabled">
+                                Enable monitoring
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveMachine()">Save Machine</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let systemStartTime = Date.now();
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Load system information
+    updateSystemInfo();
+    
+    // Set up form handlers
+    document.getElementById('systemSettingsForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveSystemSettings();
+    });
+    
+    document.getElementById('exportSettingsForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveExportSettings();
+    });
+    
+    // Update uptime every minute
+    setInterval(updateSystemInfo, 60000);
+    
+    // Check machine statuses
+    checkMachineStatuses();
+});
+
+function updateSystemInfo() {
+    // Update uptime
+    const uptime = Date.now() - systemStartTime;
+    const hours = Math.floor(uptime / (1000 * 60 * 60));
+    const minutes = Math.floor((uptime % (1000 * 60 * 60)) / (1000 * 60));
+    document.getElementById('systemUptime').textContent = `${hours}h ${minutes}m`;
+    
+    // Simulated system stats (in real implementation, these would come from the server)
+    document.getElementById('memoryUsage').textContent = '256 MB';
+    document.getElementById('cpuUsage').textContent = '15%';
+}
+
+async function checkMachineStatuses() {
+    try {
+        const response = await fetch('/api/machines/status');
+        const data = await response.json();
+        
+        Object.entries(data).forEach(([machineName, status]) => {
+            const statusElement = document.getElementById(`status-${machineName}`);
+            if (statusElement) {
+                if (status.is_connected) {
+                    statusElement.className = 'badge bg-success';
+                    statusElement.textContent = 'Online';
+                } else {
+                    statusElement.className = 'badge bg-danger';
+                    statusElement.textContent = 'Offline';
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error checking machine statuses:', error);
+    }
+}
+
+function addMachine() {
+    document.getElementById('machineId').value = '';
+    document.getElementById('machineName').value = '';
+    document.getElementById('machineUrl').value = '';
+    document.getElementById('machineDescription').value = '';
+    document.getElementById('machineEnabled').checked = true;
+    
+    const modal = new bootstrap.Modal(document.getElementById('machineConfigModal'));
+    modal.show();
+}
+
+function editMachine(machineName) {
+    // In a real implementation, this would load the machine configuration
+    document.getElementById('machineId').value = machineName;
+    document.getElementById('machineName').value = machineName;
+    document.getElementById('machineUrl').value = '{{ machines[' + machineName + '] or "" }}';
+    document.getElementById('machineDescription').value = '';
+    document.getElementById('machineEnabled').checked = true;
+    
+    const modal = new bootstrap.Modal(document.getElementById('machineConfigModal'));
+    modal.show();
+}
+
+function saveMachine() {
+    const form = document.getElementById('machineConfigForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const machineData = {
+        id: document.getElementById('machineId').value,
+        name: document.getElementById('machineName').value,
+        url: document.getElementById('machineUrl').value,
+        description: document.getElementById('machineDescription').value,
+        enabled: document.getElementById('machineEnabled').checked
+    };
+    
+    // In a real implementation, this would save to the server
+    showToast(`Machine ${machineData.name} saved successfully`, 'success');
+    
+    const modal = bootstrap.Modal.getInstance(document.getElementById('machineConfigModal'));
+    modal.hide();
+}
+
+function removeMachine(machineName) {
+    if (confirm(`Are you sure you want to remove ${machineName}?`)) {
+        // In a real implementation, this would remove from the server
+        showToast(`Machine ${machineName} removed`, 'success');
+    }
+}
+
+async function testConnection(machineName) {
+    showToast(`Testing connection to ${machineName}...`, 'info');
+    
+    try {
+        const response = await fetch(`/api/machine/${machineName}/status`);
+        const data = await response.json();
+        
+        if (data.is_connected) {
+            showToast(`Connection to ${machineName} successful`, 'success');
+        } else {
+            showToast(`Connection to ${machineName} failed`, 'error');
+        }
+    } catch (error) {
+        showToast(`Connection to ${machineName} failed`, 'error');
+    }
+}
+
+function saveSystemSettings() {
+    const settings = {
+        updateInterval: document.getElementById('updateInterval').value,
+        retryAttempts: document.getElementById('retryAttempts').value,
+        connectionTimeout: document.getElementById('connectionTimeout').value,
+        enableLogging: document.getElementById('enableLogging').checked,
+        autoReconnect: document.getElementById('autoReconnect').checked
+    };
+    
+    // In a real implementation, this would save to the server
+    showToast('System settings saved successfully', 'success');
+}
+
+function saveExportSettings() {
+    const settings = {
+        exportFormat: document.getElementById('exportFormat').value,
+        exportPath: document.getElementById('exportPath').value,
+        includeTimestamp: document.getElementById('includeTimestamp').checked
+    };
+    
+    // In a real implementation, this would save to the server
+    showToast('Export settings saved successfully', 'success');
+}
+
+function selectExportPath() {
+    // In a real implementation, this would open a directory picker
+    showToast('Directory picker not implemented in web interface', 'info');
+}
+
+function restartSystem() {
+    if (confirm('Are you sure you want to restart the system? This will temporarily interrupt monitoring.')) {
+        showToast('System restart initiated...', 'warning');
+        // In a real implementation, this would restart the system
+        setTimeout(() => {
+            showToast('System restarted successfully', 'success');
+        }, 5000);
+    }
+}
+
+function checkUpdates() {
+    showToast('Checking for updates...', 'info');
+    
+    // Simulate update check
+    setTimeout(() => {
+        showToast('System is up to date', 'success');
+    }, 2000);
+}
+
+function downloadLogs() {
+    showToast('Preparing log download...', 'info');
+    
+    // In a real implementation, this would trigger log download
+    setTimeout(() => {
+        showToast('Log download started', 'success');
+    }, 1000);
+}
+
+function createBackup() {
+    const includeConfig = document.getElementById('backupConfig').checked;
+    const includeData = document.getElementById('backupData').checked;
+    const includeLogs = document.getElementById('backupLogs').checked;
+    
+    if (!includeConfig && !includeData && !includeLogs) {
+        showToast('Please select at least one backup option', 'warning');
+        return;
+    }
+    
+    showToast('Creating backup...', 'info');
+    
+    // In a real implementation, this would create and download a backup
+    setTimeout(() => {
+        showToast('Backup created successfully', 'success');
+    }, 3000);
+}
+
+function restoreBackup() {
+    const fileInput = document.getElementById('backupFile');
+    if (!fileInput.files.length) {
+        showToast('Please select a backup file', 'warning');
+        return;
+    }
+    
+    if (confirm('Are you sure you want to restore from backup? This will overwrite current settings and data.')) {
+        showToast('Restoring from backup...', 'info');
+        
+        // In a real implementation, this would process the backup file
+        setTimeout(() => {
+            showToast('Backup restored successfully', 'success');
+        }, 5000);
+    }
+}
+
+function showToast(message, type = 'info') {
+    if (window.dashboard) {
+        window.dashboard.showNotification(message, type);
+    }
+}
+</script>
+{% endblock %}

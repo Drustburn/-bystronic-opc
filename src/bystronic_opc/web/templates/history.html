@@ -1,0 +1,659 @@
+{% extends "base.html" %}
+
+{% block title %}History - Bystronic OPC{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2><i class="bi bi-clock-history"></i> Historical Data</h2>
+            <div class="btn-group">
+                <button class="btn btn-outline-primary" onclick="exportData('csv')">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Export CSV
+                </button>
+                <button class="btn btn-outline-success" onclick="exportData('excel')">
+                    <i class="bi bi-file-earmark-excel"></i> Export Excel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Section -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-funnel"></i> Filters</h5>
+            </div>
+            <div class="card-body">
+                <form id="historyFilterForm">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <label for="machineSelect" class="form-label">Machine</label>
+                            <select id="machineSelect" class="form-select">
+                                <option value="">All Machines</option>
+                                {% for machine_name in machines.keys() %}
+                                <option value="{{ machine_name }}">{{ machine_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="startDate" class="form-label">Start Date</label>
+                            <input type="datetime-local" id="startDate" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="endDate" class="form-label">End Date</label>
+                            <input type="datetime-local" id="endDate" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">&nbsp;</label>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-search"></i> Search
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-12">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-secondary" onclick="setTimeRange(1)">Last 24h</button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="setTimeRange(7)">Last 7 days</button>
+                                <button type="button" class="btn btn-outline-secondary active" onclick="setTimeRange(30)">Last 30 days</button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="setTimeRange(90)">Last 90 days</button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Overview -->
+<div class="row">
+    <div class="col-md-3 mb-4">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 id="totalJobs">0</h4>
+                        <p class="mb-0">Total Jobs</p>
+                    </div>
+                    <i class="bi bi-briefcase fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 id="completedJobs">0</h4>
+                        <p class="mb-0">Completed</p>
+                    </div>
+                    <i class="bi bi-check-circle fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 id="totalCutTime">0h</h4>
+                        <p class="mb-0">Cut Time</p>
+                    </div>
+                    <i class="bi bi-clock fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 id="avgEfficiency">0%</h4>
+                        <p class="mb-0">Efficiency</p>
+                    </div>
+                    <i class="bi bi-graph-up fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row">
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-bar-chart"></i> Production Timeline</h5>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button class="btn btn-outline-primary active" onclick="changeChartType('daily')">Daily</button>
+                    <button class="btn btn-outline-primary" onclick="changeChartType('weekly')">Weekly</button>
+                    <button class="btn btn-outline-primary" onclick="changeChartType('monthly')">Monthly</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <canvas id="productionChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-pie-chart"></i> Machine Distribution</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="machineDistributionChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed History Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-table"></i> Detailed History</h5>
+                <div>
+                    <div class="input-group input-group-sm" style="width: 250px;">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" placeholder="Search jobs..." id="searchInput">
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="tableLoading" class="text-center py-5">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading historical data...</p>
+                </div>
+                <div class="table-responsive" id="historyTableContainer" style="display: none;">
+                    <table class="table table-striped table-hover" id="historyTable">
+                        <thead>
+                            <tr>
+                                <th>Machine</th>
+                                <th>Job Name</th>
+                                <th>Start Time</th>
+                                <th>End Time</th>
+                                <th>Duration</th>
+                                <th>Cut Time</th>
+                                <th>Parts</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                <div class="d-flex justify-content-between align-items-center mt-3" id="paginationContainer" style="display: none;">
+                    <div>
+                        <small class="text-muted">
+                            Showing <span id="showingFrom">0</span> to <span id="showingTo">0</span> of <span id="totalRecords">0</span> records
+                        </small>
+                    </div>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0" id="pagination">
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Job Detail Modal -->
+<div class="modal fade" id="jobDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Job Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="jobDetailContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading job details...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let productionChart;
+let machineDistributionChart;
+let currentPage = 1;
+let pageSize = 25;
+let totalRecords = 0;
+let currentData = [];
+let filteredData = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Set default date range (last 30 days)
+    setTimeRange(30);
+    
+    // Initialize charts
+    initializeCharts();
+    
+    // Load initial data
+    loadHistoricalData();
+    
+    // Set up form submission
+    document.getElementById('historyFilterForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        loadHistoricalData();
+    });
+    
+    // Set up search
+    document.getElementById('searchInput').addEventListener('input', function() {
+        filterData();
+    });
+});
+
+function setTimeRange(days) {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    
+    document.getElementById('endDate').value = endDate.toISOString().slice(0, 16);
+    document.getElementById('startDate').value = startDate.toISOString().slice(0, 16);
+    
+    // Update active button
+    document.querySelectorAll('.btn-group .btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+}
+
+function initializeCharts() {
+    // Production Chart
+    const productionCtx = document.getElementById('productionChart').getContext('2d');
+    productionChart = new Chart(productionCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Jobs Completed',
+                data: [],
+                borderColor: 'rgb(54, 162, 235)',
+                backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                tension: 0.1
+            }, {
+                label: 'Cut Time (hours)',
+                data: [],
+                borderColor: 'rgb(255, 99, 132)',
+                backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                tension: 0.1,
+                yAxisID: 'y1'
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Jobs Count'
+                    }
+                },
+                y1: {
+                    beginAtZero: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Cut Time (hours)'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                }
+            }
+        }
+    });
+    
+    // Machine Distribution Chart
+    const machineCtx = document.getElementById('machineDistributionChart').getContext('2d');
+    machineDistributionChart = new Chart(machineCtx, {
+        type: 'doughnut',
+        data: {
+            labels: [],
+            datasets: [{
+                data: [],
+                backgroundColor: [
+                    '#FF6384',
+                    '#36A2EB', 
+                    '#FFCE56',
+                    '#4BC0C0',
+                    '#9966FF',
+                    '#FF9F40'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+
+async function loadHistoricalData() {
+    const machine = document.getElementById('machineSelect').value;
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    
+    if (!startDate || !endDate) {
+        showToast('Please select start and end dates', 'warning');
+        return;
+    }
+    
+    document.getElementById('tableLoading').style.display = 'block';
+    document.getElementById('historyTableContainer').style.display = 'none';
+    document.getElementById('paginationContainer').style.display = 'none';
+    
+    try {
+        // Calculate days difference
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+        
+        let allData = [];
+        
+        if (machine) {
+            // Load data for specific machine
+            const response = await fetch(`/api/machine/${machine}/history?days=${days}&page_size=1000`);
+            const data = await response.json();
+            allData = data.history || [];
+        } else {
+            // Load data for all machines
+            const machines = {{ machines.keys() | list | tojsonfilter }};
+            const promises = machines.map(async (machineName) => {
+                try {
+                    const response = await fetch(`/api/machine/${machineName}/history?days=${days}&page_size=1000`);
+                    const data = await response.json();
+                    return (data.history || []).map(job => ({
+                        ...job,
+                        MachineName: machineName
+                    }));
+                } catch (error) {
+                    console.error(`Error loading data for ${machineName}:`, error);
+                    return [];
+                }
+            });
+            
+            const results = await Promise.all(promises);
+            allData = results.flat();
+        }
+        
+        currentData = allData;
+        filteredData = allData;
+        
+        updateStatistics();
+        updateCharts();
+        updateTable();
+        
+    } catch (error) {
+        console.error('Error loading historical data:', error);
+        showToast('Error loading historical data', 'error');
+    } finally {
+        document.getElementById('tableLoading').style.display = 'none';
+    }
+}
+
+function updateStatistics() {
+    const totalJobs = filteredData.length;
+    const completedJobs = filteredData.filter(job => job.CutEndTime).length;
+    
+    let totalCutTimeMinutes = 0;
+    filteredData.forEach(job => {
+        if (job.CutStartTime && job.CutEndTime) {
+            const start = new Date(job.CutStartTime);
+            const end = new Date(job.CutEndTime);
+            totalCutTimeMinutes += (end - start) / (1000 * 60);
+        }
+    });
+    
+    const totalCutHours = Math.round(totalCutTimeMinutes / 60);
+    const efficiency = totalJobs > 0 ? Math.round((completedJobs / totalJobs) * 100) : 0;
+    
+    document.getElementById('totalJobs').textContent = totalJobs;
+    document.getElementById('completedJobs').textContent = completedJobs;
+    document.getElementById('totalCutTime').textContent = `${totalCutHours}h`;
+    document.getElementById('avgEfficiency').textContent = `${efficiency}%`;
+}
+
+function updateCharts() {
+    // Group data by date for production chart
+    const dailyData = {};
+    filteredData.forEach(job => {
+        if (job.CutStartTime) {
+            const date = job.CutStartTime.split('T')[0];
+            if (!dailyData[date]) {
+                dailyData[date] = { count: 0, cutTime: 0 };
+            }
+            dailyData[date].count++;
+            
+            if (job.CutEndTime) {
+                const start = new Date(job.CutStartTime);
+                const end = new Date(job.CutEndTime);
+                const hours = (end - start) / (1000 * 60 * 60);
+                dailyData[date].cutTime += hours;
+            }
+        }
+    });
+    
+    const dates = Object.keys(dailyData).sort();
+    const jobCounts = dates.map(date => dailyData[date].count);
+    const cutTimes = dates.map(date => Math.round(dailyData[date].cutTime * 10) / 10);
+    
+    productionChart.data.labels = dates;
+    productionChart.data.datasets[0].data = jobCounts;
+    productionChart.data.datasets[1].data = cutTimes;
+    productionChart.update();
+    
+    // Group data by machine for distribution chart
+    const machineData = {};
+    filteredData.forEach(job => {
+        const machine = job.MachineName || 'Unknown';
+        machineData[machine] = (machineData[machine] || 0) + 1;
+    });
+    
+    machineDistributionChart.data.labels = Object.keys(machineData);
+    machineDistributionChart.data.datasets[0].data = Object.values(machineData);
+    machineDistributionChart.update();
+}
+
+function updateTable() {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, filteredData.length);
+    const pageData = filteredData.slice(startIndex, endIndex);
+    
+    const tbody = document.getElementById('historyTableBody');
+    tbody.innerHTML = '';
+    
+    if (pageData.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="text-center text-muted py-4">
+                    <i class="bi bi-inbox fs-1"></i>
+                    <p>No data found for the selected criteria</p>
+                </td>
+            </tr>
+        `;
+    } else {
+        pageData.forEach(job => {
+            const row = document.createElement('tr');
+            
+            const startTime = job.CutStartTime ? new Date(job.CutStartTime).toLocaleString() : 'N/A';
+            const endTime = job.CutEndTime ? new Date(job.CutEndTime).toLocaleString() : 'N/A';
+            const duration = calculateDuration(job.CutStartTime, job.CutEndTime);
+            const cutTime = job.ActualCutTime ? `${Math.round(job.ActualCutTime / 60)}min` : 'N/A';
+            
+            row.innerHTML = `
+                <td>${job.MachineName || 'Unknown'}</td>
+                <td>${job.JobName || job.JobGuid || 'Unknown'}</td>
+                <td>${startTime}</td>
+                <td>${endTime}</td>
+                <td>${duration}</td>
+                <td>${cutTime}</td>
+                <td>${job.PartCount || 'N/A'}</td>
+                <td><span class="badge ${job.CutEndTime ? 'bg-success' : 'bg-warning'}">${job.CutEndTime ? 'Completed' : 'In Progress'}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" onclick="viewJobDetails('${job.JobGuid}')">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                </td>
+            `;
+            
+            tbody.appendChild(row);
+        });
+    }
+    
+    // Update pagination
+    updatePagination();
+    
+    document.getElementById('historyTableContainer').style.display = 'block';
+    document.getElementById('paginationContainer').style.display = filteredData.length > 0 ? 'flex' : 'none';
+}
+
+function updatePagination() {
+    const totalPages = Math.ceil(filteredData.length / pageSize);
+    const startRecord = (currentPage - 1) * pageSize + 1;
+    const endRecord = Math.min(currentPage * pageSize, filteredData.length);
+    
+    document.getElementById('showingFrom').textContent = startRecord;
+    document.getElementById('showingTo').textContent = endRecord;
+    document.getElementById('totalRecords').textContent = filteredData.length;
+    
+    const pagination = document.getElementById('pagination');
+    pagination.innerHTML = '';
+    
+    // Previous button
+    const prevLi = document.createElement('li');
+    prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+    prevLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${currentPage - 1})">Previous</a>`;
+    pagination.appendChild(prevLi);
+    
+    // Page numbers
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+    
+    for (let i = startPage; i <= endPage; i++) {
+        const li = document.createElement('li');
+        li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+        li.innerHTML = `<a class="page-link" href="#" onclick="changePage(${i})">${i}</a>`;
+        pagination.appendChild(li);
+    }
+    
+    // Next button
+    const nextLi = document.createElement('li');
+    nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+    nextLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${currentPage + 1})">Next</a>`;
+    pagination.appendChild(nextLi);
+}
+
+function changePage(page) {
+    const totalPages = Math.ceil(filteredData.length / pageSize);
+    if (page >= 1 && page <= totalPages) {
+        currentPage = page;
+        updateTable();
+    }
+}
+
+function filterData() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    
+    if (searchTerm === '') {
+        filteredData = currentData;
+    } else {
+        filteredData = currentData.filter(job => {
+            return (job.JobName && job.JobName.toLowerCase().includes(searchTerm)) ||
+                   (job.JobGuid && job.JobGuid.toLowerCase().includes(searchTerm)) ||
+                   (job.MachineName && job.MachineName.toLowerCase().includes(searchTerm));
+        });
+    }
+    
+    currentPage = 1; // Reset to first page
+    updateStatistics();
+    updateCharts();
+    updateTable();
+}
+
+function calculateDuration(startTime, endTime) {
+    if (!startTime || !endTime) return 'N/A';
+    
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const diffMs = end - start;
+    const diffMins = Math.round(diffMs / 60000);
+    
+    if (diffMins < 60) {
+        return `${diffMins} min`;
+    } else {
+        const hours = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+        return `${hours}h ${mins}m`;
+    }
+}
+
+function changeChartType(type) {
+    // Update active button
+    document.querySelectorAll('.card-header .btn-group .btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // This would implement different chart aggregations (daily, weekly, monthly)
+    showToast(`Chart type changed to ${type}`, 'info');
+}
+
+function viewJobDetails(jobGuid) {
+    const modal = new bootstrap.Modal(document.getElementById('jobDetailModal'));
+    modal.show();
+    
+    document.getElementById('jobDetailContent').innerHTML = `
+        <div class="alert alert-info">
+            <h6>Job Details: ${jobGuid}</h6>
+            <p>Detailed job information would be displayed here.</p>
+            <p>This requires implementation of specific job detail endpoints.</p>
+        </div>
+    `;
+}
+
+function exportData(format) {
+    showToast(`Exporting data to ${format.toUpperCase()}...`, 'info');
+    
+    // This would implement data export functionality
+    setTimeout(() => {
+        showToast(`Export to ${format.toUpperCase()} completed`, 'success');
+    }, 2000);
+}
+
+function showToast(message, type = 'info') {
+    if (window.dashboard) {
+        window.dashboard.showNotification(message, type);
+    }
+}
+</script>
+{% endblock %}

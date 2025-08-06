@@ -1,0 +1,486 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Bystronic OPC{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Summary Cards -->
+    <div class="col-12 mb-4">
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="card-title mb-0" id="total-machines">{{ machines|length }}</h4>
+                                <p class="card-text">Total Machines</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="bi bi-gear-fill fs-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="card-title mb-0" id="connected-machines">0</h4>
+                                <p class="card-text">Connected</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="bi bi-wifi fs-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <div class="card bg-warning text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="card-title mb-0" id="active-jobs">0</h4>
+                                <p class="card-text">Active Jobs</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="bi bi-play-circle-fill fs-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="card-title mb-0" id="efficiency">0%</h4>
+                                <p class="card-text">Efficiency</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="bi bi-graph-up fs-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Machine Status Cards -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <h3><i class="bi bi-gear"></i> Machine Status</h3>
+        <div class="row" id="machine-cards">
+            {% for machine_name, machine_url in machines.items() %}
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="card machine-card" data-machine="{{ machine_name }}">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-gear-fill"></i> {{ machine_name }}
+                        </h5>
+                        <span class="badge machine-status-badge" id="status-{{ machine_name }}">
+                            <i class="bi bi-question-circle"></i> Unknown
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <!-- Connection Status -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>Connection:</span>
+                                <span id="connection-{{ machine_name }}" class="text-muted">Checking...</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Current Job -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>Current Job:</span>
+                                <span id="job-{{ machine_name }}" class="text-muted">-</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Laser Power -->
+                        <div class="mb-3">
+                            <label for="power-{{ machine_name }}" class="form-label">Laser Power</label>
+                            <div class="progress">
+                                <div class="progress-bar" id="power-bar-{{ machine_name }}" 
+                                     role="progressbar" style="width: 0%">0W</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Gas Pressure -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>Gas Pressure:</span>
+                                <span id="pressure-{{ machine_name }}" class="text-muted">0 bar</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Last Update -->
+                        <div class="mb-3">
+                            <small class="text-muted">
+                                Last update: <span id="update-{{ machine_name }}">Never</span>
+                            </small>
+                        </div>
+                        
+                        <!-- Action Buttons -->
+                        <div class="btn-group w-100" role="group">
+                            <a href="{{ url_for('machine_detail', machine_name=machine_name) }}" 
+                               class="btn btn-primary btn-sm">
+                                <i class="bi bi-eye"></i> Details
+                            </a>
+                            <button class="btn btn-outline-secondary btn-sm" 
+                                    onclick="getScreenshot('{{ machine_name }}')">
+                                <i class="bi bi-camera"></i> Screen
+                            </button>
+                            <button class="btn btn-outline-info btn-sm"
+                                    onclick="refreshMachine('{{ machine_name }}')">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Real-time Chart -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-graph-up"></i> Real-time Laser Power</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="laserPowerChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Recent Activity</h5>
+                <button class="btn btn-sm btn-outline-primary" onclick="refreshActivity()">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="activity-list">
+                    <div class="text-center text-muted py-3">
+                        <i class="bi bi-clock fs-1"></i>
+                        <p>Loading recent activity...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Screenshot Modal -->
+<div class="modal fade" id="screenshotModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Machine Screenshot</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="screenshotImage" class="img-fluid" src="" alt="Machine Screenshot">
+                <div id="screenshotLoading" class="text-center py-5">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Capturing screenshot...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="downloadScreenshot()">
+                    <i class="bi bi-download"></i> Download
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Dashboard-specific JavaScript
+let socket;
+let laserPowerChart;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize WebSocket connection
+    initializeSocket();
+    
+    // Initialize real-time chart
+    initializeLaserPowerChart();
+    
+    // Load initial data
+    loadMachineStatus();
+    loadRecentActivity();
+    
+    // Set up auto-refresh
+    setInterval(loadMachineStatus, 30000); // Refresh every 30 seconds
+    setInterval(updateClock, 1000); // Update clock every second
+});
+
+function initializeSocket() {
+    socket = io();
+    
+    socket.on('connect', function() {
+        console.log('Connected to server');
+        updateConnectionStatus(true);
+        
+        // Subscribe to all machines
+        {% for machine_name in machines.keys() %}
+        socket.emit('subscribe_machine', {machine_name: '{{ machine_name }}'});
+        {% endfor %}
+    });
+    
+    socket.on('disconnect', function() {
+        console.log('Disconnected from server');
+        updateConnectionStatus(false);
+    });
+    
+    socket.on('machine_update', function(data) {
+        updateMachineCard(data);
+    });
+    
+    socket.on('summary_update', function(data) {
+        updateSummaryCards(data);
+    });
+}
+
+function updateConnectionStatus(connected) {
+    const statusElement = document.getElementById('connection-status');
+    if (connected) {
+        statusElement.className = 'badge bg-success';
+        statusElement.innerHTML = '<i class="bi bi-wifi"></i> Connected';
+    } else {
+        statusElement.className = 'badge bg-danger';
+        statusElement.innerHTML = '<i class="bi bi-wifi-off"></i> Disconnected';
+    }
+}
+
+function loadMachineStatus() {
+    fetch('/api/machines/status')
+        .then(response => response.json())
+        .then(data => {
+            let connectedCount = 0;
+            let activeJobs = 0;
+            
+            for (const [machineName, status] of Object.entries(data)) {
+                updateMachineCard({
+                    machine_name: machineName,
+                    is_connected: status.is_connected,
+                    current_job: status.current_job,
+                    last_update: status.last_update
+                });
+                
+                if (status.is_connected) connectedCount++;
+                if (status.current_job) activeJobs++;
+            }
+            
+            // Update summary cards
+            document.getElementById('connected-machines').textContent = connectedCount;
+            document.getElementById('active-jobs').textContent = activeJobs;
+            document.getElementById('connected-count').textContent = connectedCount;
+            
+            // Calculate efficiency (simplified)
+            const efficiency = Math.round((connectedCount / {{ machines|length }}) * 100);
+            document.getElementById('efficiency').textContent = efficiency + '%';
+        })
+        .catch(error => {
+            console.error('Error loading machine status:', error);
+        });
+}
+
+function updateMachineCard(data) {
+    const machineName = data.machine_name;
+    const statusBadge = document.getElementById(`status-${machineName}`);
+    const connectionSpan = document.getElementById(`connection-${machineName}`);
+    const jobSpan = document.getElementById(`job-${machineName}`);
+    const updateSpan = document.getElementById(`update-${machineName}`);
+    
+    // Update status badge
+    if (data.is_connected) {
+        statusBadge.className = 'badge bg-success machine-status-badge';
+        statusBadge.innerHTML = '<i class="bi bi-check-circle"></i> Online';
+        connectionSpan.textContent = 'Connected';
+        connectionSpan.className = 'text-success';
+    } else {
+        statusBadge.className = 'badge bg-danger machine-status-badge';
+        statusBadge.innerHTML = '<i class="bi bi-x-circle"></i> Offline';
+        connectionSpan.textContent = 'Disconnected';
+        connectionSpan.className = 'text-danger';
+    }
+    
+    // Update current job
+    if (data.current_job) {
+        jobSpan.textContent = data.current_job;
+        jobSpan.className = 'text-success fw-bold';
+    } else {
+        jobSpan.textContent = 'No active job';
+        jobSpan.className = 'text-muted';
+    }
+    
+    // Update last update time
+    if (data.last_update) {
+        const updateTime = new Date(data.last_update);
+        updateSpan.textContent = updateTime.toLocaleTimeString();
+    }
+}
+
+function initializeLaserPowerChart() {
+    const ctx = document.getElementById('laserPowerChart').getContext('2d');
+    laserPowerChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {% for machine_name in machines.keys() %}
+                {
+                    label: '{{ machine_name }}',
+                    data: [],
+                    borderColor: getRandomColor(),
+                    backgroundColor: 'rgba(0,0,0,0.1)',
+                    tension: 0.1
+                }{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Laser Power (W)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true
+                }
+            }
+        }
+    });
+}
+
+function getRandomColor() {
+    const colors = [
+        'rgb(255, 99, 132)',
+        'rgb(54, 162, 235)',
+        'rgb(255, 205, 86)',
+        'rgb(75, 192, 192)',
+        'rgb(153, 102, 255)',
+        'rgb(255, 159, 64)'
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
+}
+
+function refreshMachine(machineName) {
+    fetch(`/api/machine/${machineName}/status`)
+        .then(response => response.json())
+        .then(data => {
+            updateMachineCard(data);
+            
+            // Show toast notification
+            showToast(`${machineName} refreshed successfully`, 'success');
+        })
+        .catch(error => {
+            showToast(`Error refreshing ${machineName}`, 'error');
+        });
+}
+
+function getScreenshot(machineName) {
+    const modal = new bootstrap.Modal(document.getElementById('screenshotModal'));
+    const image = document.getElementById('screenshotImage');
+    const loading = document.getElementById('screenshotLoading');
+    
+    // Show modal and loading
+    modal.show();
+    image.style.display = 'none';
+    loading.style.display = 'block';
+    
+    // Fetch screenshot
+    fetch(`/api/machine/${machineName}/screen`)
+        .then(response => response.blob())
+        .then(blob => {
+            const imageUrl = URL.createObjectURL(blob);
+            image.src = imageUrl;
+            image.style.display = 'block';
+            loading.style.display = 'none';
+        })
+        .catch(error => {
+            loading.innerHTML = '<p class="text-danger">Error loading screenshot</p>';
+        });
+}
+
+function loadRecentActivity() {
+    // Placeholder for recent activity
+    const activityList = document.getElementById('activity-list');
+    activityList.innerHTML = `
+        <div class="list-group">
+            <div class="list-group-item">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">System Started</h6>
+                    <small>Just now</small>
+                </div>
+                <p class="mb-1">Bystronic OPC monitoring system initialized</p>
+            </div>
+        </div>
+    `;
+}
+
+function updateClock() {
+    const now = new Date();
+    document.getElementById('current-time').textContent = 
+        now.toLocaleString('de-DE');
+}
+
+function showToast(message, type = 'info') {
+    // Simple toast notification
+    const toastContainer = document.createElement('div');
+    toastContainer.className = `alert alert-${type === 'error' ? 'danger' : 'success'} alert-dismissible fade show position-fixed`;
+    toastContainer.style.top = '20px';
+    toastContainer.style.right = '20px';
+    toastContainer.style.zIndex = '9999';
+    toastContainer.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(toastContainer);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        toastContainer.remove();
+    }, 5000);
+}
+</script>
+{% endblock %}

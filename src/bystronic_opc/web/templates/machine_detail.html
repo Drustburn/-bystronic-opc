@@ -1,0 +1,525 @@
+{% extends "base.html" %}
+
+{% block title %}{{ machine_name }} - Machine Details{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2><i class="bi bi-gear-fill"></i> {{ machine_name }}</h2>
+                <p class="text-muted mb-0">{{ machine_url }}</p>
+            </div>
+            <div>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Dashboard
+                </a>
+                <button class="btn btn-primary" onclick="refreshMachineData()">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Status Overview -->
+<div class="row">
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-info-circle"></i> Machine Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Connection Status</h6>
+                        <p id="connection-status" class="text-muted">
+                            {% if status and status.is_connected %}
+                                <span class="badge bg-success"><i class="bi bi-check-circle"></i> Connected</span>
+                            {% else %}
+                                <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Disconnected</span>
+                            {% endif %}
+                        </p>
+                        
+                        <h6>Current Job</h6>
+                        <p id="current-job">
+                            {% if status and status.current_job %}
+                                <strong>{{ status.current_job.name }}</strong><br>
+                                <small class="text-muted">GUID: {{ status.current_job.guid }}</small>
+                            {% else %}
+                                <span class="text-muted">No active job</span>
+                            {% endif %}
+                        </p>
+                        
+                        <h6>Last Update</h6>
+                        <p id="last-update">
+                            {% if status and status.last_update %}
+                                {{ status.last_update.strftime('%Y-%m-%d %H:%M:%S') }}
+                            {% else %}
+                                <span class="text-muted">Never</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        {% if status and status.laser_parameters %}
+                        <h6>Laser Parameters</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <td>Current Power:</td>
+                                <td><strong id="laser-power">{{ status.laser_parameters.current_laser_power }} W</strong></td>
+                            </tr>
+                            <tr>
+                                <td>Power Setpoint:</td>
+                                <td id="power-setpoint">{{ status.laser_parameters.laser_power_setpoint }} W</td>
+                            </tr>
+                            <tr>
+                                <td>Gas Pressure:</td>
+                                <td id="gas-pressure">{{ status.laser_parameters.gas_pressure }} bar</td>
+                            </tr>
+                            <tr>
+                                <td>Gas Channel:</td>
+                                <td id="gas-channel">{{ status.laser_parameters.gas_channel }}</td>
+                            </tr>
+                            <tr>
+                                <td>Operation Mode:</td>
+                                <td id="operation-mode">{{ status.laser_parameters.process_operation_mode }}</td>
+                            </tr>
+                        </table>
+                        {% else %}
+                        <h6>Laser Parameters</h6>
+                        <p class="text-muted">Parameters not available</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-lightning"></i> Quick Actions</h5>
+            </div>
+            <div class="card-body d-grid gap-2">
+                <button class="btn btn-primary" onclick="getScreenshot()">
+                    <i class="bi bi-camera"></i> Get Screenshot
+                </button>
+                <button class="btn btn-info" onclick="getJobInfo()">
+                    <i class="bi bi-file-text"></i> Get Job Info
+                </button>
+                <button class="btn btn-success" onclick="getLaserParams()">
+                    <i class="bi bi-lightning-charge"></i> Update Laser Params
+                </button>
+                <button class="btn btn-secondary" onclick="exportData()">
+                    <i class="bi bi-download"></i> Export Data
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Historical Data Chart -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-graph-up"></i> Historical Data</h5>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-sm btn-outline-primary" onclick="loadHistory(1)">1 Day</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="loadHistory(7)">7 Days</button>
+                    <button class="btn btn-sm btn-outline-primary active" onclick="loadHistory(30)">30 Days</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <canvas id="historyChart" height="100"></canvas>
+                <div id="historyLoading" class="text-center py-5" style="display: none;">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading historical data...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Jobs Table -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-table"></i> Recent Jobs</h5>
+                <button class="btn btn-sm btn-outline-primary" onclick="loadRecentJobs()">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped" id="jobs-table">
+                        <thead>
+                            <tr>
+                                <th>Job Name</th>
+                                <th>Start Time</th>
+                                <th>End Time</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="jobs-tbody">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">
+                                    <i class="bi bi-clock fs-1"></i>
+                                    <p>Loading recent jobs...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Screenshot Modal -->
+<div class="modal fade" id="screenshotModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ machine_name }} - Screenshot</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="screenshotImage" class="img-fluid" src="" alt="Machine Screenshot" style="display: none;">
+                <div id="screenshotLoading" class="py-5">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Capturing screenshot...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="downloadScreenshot()">
+                    <i class="bi bi-download"></i> Download
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Job Info Modal -->
+<div class="modal fade" id="jobInfoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Job Information</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="jobInfoContent">
+                    <div class="text-center py-4">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading job information...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let historyChart;
+const machineName = '{{ machine_name }}';
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize historical data chart
+    initializeHistoryChart();
+    
+    // Load initial data
+    loadHistory(7); // Load 7 days by default
+    loadRecentJobs();
+    
+    // Set up auto-refresh
+    setInterval(refreshMachineData, 30000); // Refresh every 30 seconds
+});
+
+function initializeHistoryChart() {
+    const ctx = document.getElementById('historyChart').getContext('2d');
+    historyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Jobs Completed',
+                data: [],
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Jobs Count'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true
+                }
+            }
+        }
+    });
+}
+
+function refreshMachineData() {
+    fetch(`/api/machine/${machineName}/status`)
+        .then(response => response.json())
+        .then(data => {
+            updateMachineStatus(data);
+            showToast('Machine data refreshed', 'success');
+        })
+        .catch(error => {
+            showToast('Error refreshing machine data', 'error');
+            console.error('Error:', error);
+        });
+}
+
+function updateMachineStatus(data) {
+    // Update connection status
+    const connectionStatus = document.getElementById('connection-status');
+    if (data.is_connected) {
+        connectionStatus.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Connected</span>';
+    } else {
+        connectionStatus.innerHTML = '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Disconnected</span>';
+    }
+    
+    // Update current job
+    const currentJob = document.getElementById('current-job');
+    if (data.current_job && data.current_job.name) {
+        currentJob.innerHTML = `<strong>${data.current_job.name}</strong><br><small class="text-muted">GUID: ${data.current_job.guid}</small>`;
+    } else {
+        currentJob.innerHTML = '<span class="text-muted">No active job</span>';
+    }
+    
+    // Update laser parameters
+    if (data.laser_parameters) {
+        document.getElementById('laser-power').textContent = `${data.laser_parameters.current_power} W`;
+        document.getElementById('gas-pressure').textContent = `${data.laser_parameters.gas_pressure} bar`;
+    }
+    
+    // Update last update time
+    if (data.last_update) {
+        document.getElementById('last-update').textContent = new Date(data.last_update).toLocaleString();
+    }
+}
+
+function loadHistory(days) {
+    const loading = document.getElementById('historyLoading');
+    loading.style.display = 'block';
+    
+    // Update active button
+    document.querySelectorAll('.btn-group .btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    fetch(`/api/machine/${machineName}/history?days=${days}`)
+        .then(response => response.json())
+        .then(data => {
+            updateHistoryChart(data.history);
+            loading.style.display = 'none';
+        })
+        .catch(error => {
+            console.error('Error loading history:', error);
+            loading.style.display = 'none';
+            showToast('Error loading historical data', 'error');
+        });
+}
+
+function updateHistoryChart(historyData) {
+    // Process data for chart (group by date)
+    const dailyCounts = {};
+    
+    historyData.forEach(run => {
+        const date = run.CutStartTime ? run.CutStartTime.split('T')[0] : new Date().toISOString().split('T')[0];
+        dailyCounts[date] = (dailyCounts[date] || 0) + 1;
+    });
+    
+    const labels = Object.keys(dailyCounts).sort();
+    const data = labels.map(label => dailyCounts[label]);
+    
+    historyChart.data.labels = labels;
+    historyChart.data.datasets[0].data = data;
+    historyChart.update();
+}
+
+function loadRecentJobs() {
+    const tbody = document.getElementById('jobs-tbody');
+    
+    fetch(`/api/machine/${machineName}/history?days=7&page_size=20`)
+        .then(response => response.json())
+        .then(data => {
+            tbody.innerHTML = '';
+            
+            if (data.history.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox fs-1"></i>
+                            <p>No recent jobs found</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            data.history.slice(0, 10).forEach(job => {
+                const row = document.createElement('tr');
+                
+                const startTime = job.CutStartTime ? new Date(job.CutStartTime).toLocaleString() : 'N/A';
+                const endTime = job.CutEndTime ? new Date(job.CutEndTime).toLocaleString() : 'N/A';
+                const duration = calculateDuration(job.CutStartTime, job.CutEndTime);
+                
+                row.innerHTML = `
+                    <td>${job.JobName || 'Unknown Job'}</td>
+                    <td>${startTime}</td>
+                    <td>${endTime}</td>
+                    <td>${duration}</td>
+                    <td><span class="badge bg-success">Completed</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="viewJobDetails('${job.JobGuid}')">
+                            <i class="bi bi-eye"></i> View
+                        </button>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading recent jobs:', error);
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center text-danger py-4">
+                        <i class="bi bi-exclamation-triangle fs-1"></i>
+                        <p>Error loading jobs</p>
+                    </td>
+                </tr>
+            `;
+        });
+}
+
+function calculateDuration(startTime, endTime) {
+    if (!startTime || !endTime) return 'N/A';
+    
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const diffMs = end - start;
+    const diffMins = Math.round(diffMs / 60000);
+    
+    if (diffMins < 60) {
+        return `${diffMins} min`;
+    } else {
+        const hours = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+        return `${hours}h ${mins}m`;
+    }
+}
+
+function getScreenshot() {
+    const modal = new bootstrap.Modal(document.getElementById('screenshotModal'));
+    const image = document.getElementById('screenshotImage');
+    const loading = document.getElementById('screenshotLoading');
+    
+    modal.show();
+    image.style.display = 'none';
+    loading.style.display = 'block';
+    
+    fetch(`/api/machine/${machineName}/screen`)
+        .then(response => response.blob())
+        .then(blob => {
+            const imageUrl = URL.createObjectURL(blob);
+            image.src = imageUrl;
+            image.style.display = 'block';
+            loading.style.display = 'none';
+        })
+        .catch(error => {
+            loading.innerHTML = '<p class="text-danger">Error loading screenshot</p>';
+        });
+}
+
+function getJobInfo() {
+    const modal = new bootstrap.Modal(document.getElementById('jobInfoModal'));
+    modal.show();
+    
+    // This would fetch current job info
+    setTimeout(() => {
+        document.getElementById('jobInfoContent').innerHTML = `
+            <div class="alert alert-info">
+                <h6>Current Job Information</h6>
+                <p>This feature requires implementation of specific job info endpoints.</p>
+            </div>
+        `;
+    }, 1000);
+}
+
+function getLaserParams() {
+    refreshMachineData();
+    showToast('Laser parameters updated', 'info');
+}
+
+function exportData() {
+    // This would trigger data export
+    showToast('Data export feature coming soon', 'info');
+}
+
+function viewJobDetails(jobGuid) {
+    // This would show detailed job information
+    showToast(`Viewing details for job: ${jobGuid}`, 'info');
+}
+
+function downloadScreenshot() {
+    const image = document.getElementById('screenshotImage');
+    if (image.src) {
+        const link = document.createElement('a');
+        link.download = `${machineName}_screenshot_${new Date().toISOString()}.png`;
+        link.href = image.src;
+        link.click();
+    }
+}
+
+function showToast(message, type = 'info') {
+    const toastContainer = document.createElement('div');
+    toastContainer.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} alert-dismissible fade show position-fixed`;
+    toastContainer.style.top = '20px';
+    toastContainer.style.right = '20px';
+    toastContainer.style.zIndex = '9999';
+    toastContainer.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(toastContainer);
+    
+    setTimeout(() => {
+        toastContainer.remove();
+    }, 5000);
+}
+</script>
+{% endblock %}
